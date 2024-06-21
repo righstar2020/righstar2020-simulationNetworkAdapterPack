@@ -5,7 +5,8 @@ import uuid
 import time
 import hashlib
 from db.tiny_db import  TinyDBUtil
-logging.basicConfig(level=logging.INFO)
+from asyncio import StreamReader,StreamWriter
+logging.basicConfig(filename='./server.log',level=logging.INFO)
 
 class ClientConnectServer:
     def __init__(self):
@@ -36,7 +37,7 @@ class ClientConnectServer:
     async def send_test_task(self):
         # 示例任务数据结构，添加到队列时应包含客户端IP
         attacker_task_data = { 
-            'id':1,
+            'id':'none',
             'player':'attacker',
             'client_ip':'10.0.0.1',#攻击者主机
             'task_type':'signal',
@@ -47,7 +48,7 @@ class ClientConnectServer:
             }
         }
         defender_task_data = { 
-            'id':2,
+            'id':'none',
             'player':'defender',
             'client_ip':'10.0.0.4',#防御者主机
             'task_type':'signal',
@@ -64,10 +65,17 @@ class ClientConnectServer:
         defender_task = await self.put_task_data(defender_task_data)
         
         return {"attacker_task_data":attacker_task,"defender_task_data":defender_task}
-    async def handle_heartbeat(self, client_ip: str) -> None:
+    async def _safe_send(self,writer:StreamWriter, data):
+        """安全发送消息，处理可能的连接关闭情况"""
+        if writer and not writer.is_closing():
+            data_str = json.dumps(data)
+            writer.write(data_str.encode() + b'\n')  # 确保消息末尾有换行
+            await asyncio.wait_for(writer.drain(), timeout=30)
+    async def handle_heartbeat(self, writer:StreamWriter,client_ip: str) -> None:
         """处理心跳包，更新心跳时间"""
         logging.info(f"Heartbeat from {client_ip}.")
         self.connected_clients[client_ip]['last_heartbeat_time'] = time.time()
+        
     async def handle_task_result(self, task_result,client_ip) -> None:
         """任务处理结果"""
         logging.info(f"Task result from {client_ip} stored.")
@@ -75,38 +83,51 @@ class ClientConnectServer:
         logging.info(f"Task result from {client_ip} stored.")
         pass
     
-    async def handle_rpc(self, reader, writer, client_address: tuple) -> None:
+    async def handle_rpc(self, reader:StreamReader, writer:StreamWriter, client_address: tuple) -> None:
         """处理单个客户端的RPC请求"""
         client_ip = client_address[0]
+        client_port = client_address[1]
         self.connected_clients[client_ip] = {
             'writer': writer,
-            'last_heartbeat_time': time.time(),
+            'reader': reader,
+            'client_ip':client_ip,
+            'client_port':client_port,
+            'last_heartbeat_time': time.time()
         }
-        logging.info(f"{client_ip} connected.")
+        logging.info(f"{client_address} connected.")
         try:
             while True:
                 try:
                     data_raw = await reader.readline()
                     data=json.loads(data_raw.decode().strip())
+                    logging.info(f"data from {client_ip}:{data}")
                     if data.get("type") == "heartbeat":
-                        await self.handle_heartbeat(client_ip)
+                        await self.handle_heartbeat(writer,client_ip)
                     else:
                         await self.handle_task_result(data,client_ip)
                 except Exception as e:
-                    logging.warning(f"err: {e}.")
-                    break
+                    logging.warning(f"err: {e}")
+            
         finally:
             del self.connected_clients[client_ip]
             logging.info(f"Connection closed from {client_address}.")
     async def heartbeat_monitor(self):
         logging.info(f"heartbeat monitor start.")
         while True:
-            await asyncio.sleep(10)  # 每10秒检查一次
-            logging.info(f"taskQueue length:{self.taskQueue.qsize()}.")
-            clients_to_remove = [ip for ip, client in self.connected_clients.items() if client.get('last_heartbeat_time', 0) + 20 < time.time()]
-            for ip in clients_to_remove:
-                logging.info(f"Removing inactive client: {ip}")
-                del self.connected_clients[ip]
+            await asyncio.sleep(5)  # 每5秒检查一次
+            logging.info(f"server heartbeat! client count:{len(self.connected_clients)}.")
+            # """需要返回数据以保持连接""" 
+            # for client_ip, client_info in self.connected_clients.items():
+            #     writer = client_info['writer']
+            #     logging.info(f"server heartbeat  send to {client_ip}.")
+            #     try:
+            #         await self._safe_send(writer,{'data':'ok','type':'heartbeat'})
+            #     except Exception as e:
+            #         logging.warning(f"err: {e}.")
+            # clients_to_remove = [ip for ip, client in self.connected_clients.items() if client.get('last_heartbeat_time', 0) + 40 < time.time()]
+            # for ip in clients_to_remove:
+            #     logging.info(f"Removing inactive client: {ip}")
+            #     del self.connected_clients[ip]
     async def distribute_tasks(self):
         logging.info(f"distribute tasks start.")
         """分发任务给客户端"""
@@ -118,10 +139,8 @@ class ClientConnectServer:
                 task_json = json.dumps(task_data)
                 client_writer = client_info['writer']
                 try:
-                    client_writer.write(task_json.encode()+b'\n') #写入换行防止并发错误
-                    await client_writer.drain()
+                    await self._safe_send(client_writer,{'data':task_json,'type':'task'})
                     logging.info(f"Task sent to client {client_ip}: {task_data}")
-                   
                 except Exception as e:
                     logging.warning(f"Failed to send task to {client_ip}: {e}")
                     # 将任务重新放回队列
@@ -190,7 +209,7 @@ class ClientConnectServer:
         return await self.taskResultQueue.get()
     async def get_connected_clients(self):
         return self.connected_clients
-    async def start_server(self, host: str = '0.0.0.0', port: int = 8888) -> None:
+    async def start_server(self, host: str = '10.0.0.252', port: int = 8888) -> None:
         server = await asyncio.start_server(
             lambda r, w: self.handle_rpc(r, w, w.get_extra_info('peername')),
             host, port)

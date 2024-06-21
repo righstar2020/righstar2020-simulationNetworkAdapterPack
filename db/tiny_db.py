@@ -4,13 +4,13 @@ from tinydb import TinyDB, Query,where
 from tinydb.storages import MemoryStorage
 from concurrent.futures import ThreadPoolExecutor
 import logging
+from system.file_util import get_project_root_path
 logging.basicConfig(level=logging.INFO)
 class TinyDBUtil:
     def __init__(self):
-        self.db_path = None
+        self.db_path = get_project_root_path()+"/db/db.json"
         pass
-    async def init_db(self):
-        self.db_path = "db.json"
+    async def init_db(self): 
         data = {"author": "rightstar", "version": '1.0'}
         await self.async_upsert_by_key( "config", data,"version",'1.0')
         logging.info("init tinydb success.")

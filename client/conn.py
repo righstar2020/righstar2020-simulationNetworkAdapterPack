@@ -34,9 +34,10 @@ class Client:
     async def _establish_connection(self):
         """内部方法，仅用于建立连接，不包含重试逻辑"""
         try:
-            self.reader, self.writer = await asyncio.wait_for(asyncio.open_connection(self.server_ip, self.server_port), timeout=10)
+            self.reader, self.writer = await asyncio.wait_for(asyncio.open_connection(self.server_ip, self.server_port), timeout=40)
             logging.info(f'Connected to {self.server_ip}:{self.server_port} success!')
         except Exception as e:
+            logging.error(f'Connection info: {self.server_ip, self.server_port}')
             logging.error(f'Connection attempt failed: {e}')
             raise Exception("Failed to connect to the server.")
 
@@ -62,20 +63,17 @@ class Client:
         """安全发送消息，处理可能的连接关闭情况"""
         if self.writer and not self.writer.is_closing():
             self.writer.write(message.encode() + b'\n')  # 确保消息末尾有换行
-            await asyncio.wait_for(self.writer.drain(), timeout=10)
+            await asyncio.wait_for(self.writer.drain(), timeout=600)
 
     async def send_heartbeat(self):
         """客户端心跳发送函数"""
         logging.info("send heartbeat started.")
         while True:
-            await asyncio.sleep(random.uniform(5, 10))
+            await asyncio.sleep(20)
             try:
                 heartbeat_data = {"type": "heartbeat", "timestamp": int(time.time())}
                 logging.info(f"send_heartbeat-->: {heartbeat_data}")
                 await self._safe_send(json.dumps(heartbeat_data))
-            except asyncio.CancelledError:
-                logging.info("Heartbeat task cancelled.")
-                return
             except Exception as e:
                 logging.warning(f"Heartbeat failed, attempting to reconnect: {e}")
                 await self.connect_to_server()
@@ -86,17 +84,23 @@ class Client:
         logging.info("receive messages started.")
         while True:
             try:
-                data = await self.reader.readline()
-                if not data:
-                    continue
-                request = data.decode().strip()  # 移除行尾的换行符
-                request_data = json.loads(request)
-                logging.info(f"receive_messages-->: {request}")
-                self.taskQueue.put_nowait(request_data)  # 将消息放入任务队列
+                data_raw = await self.reader.readline()
+                try:
+                    data=json.loads(data_raw.decode().strip())
+                    logging.info(f"data from server :{data}.")
+                    if data.get("type") == "heartbeat":
+                        #如果是心跳包直接忽略
+                        pass
+                    elif data.get("type") == "task":
+                        self.taskQueue.put_nowait(data)  # 将消息放入任务队列
+                    else:
+                        logging.warning(f"unkown type:{data}")
+                except Exception as e:
+                    logging.warning(f"receive_messages-->Unable to decode data: {data_raw}")                
             except Exception as e:
                 logging.warning(f"receive_messages-->Connection lost: Attempting to reconnect...")
                 #等待一个心跳后重试
-                await asyncio.sleep(random.uniform(5, 10))
+                await asyncio.sleep(5)
                 # 尝试重新连接
                 await self.connect_to_server()
 
@@ -152,17 +156,12 @@ class Client:
                     asyncio.create_task(self.receive_messages()),
                     asyncio.create_task(self.process_tasks()),
                     asyncio.create_task(self.send_results()),
-                    asyncio.create_task(self.send_heartbeat()),
+                    asyncio.create_task(self.send_heartbeat())
                 ])
                 await asyncio.gather(*tasks)
-        except asyncio.CancelledError:
-            logging.info("Client run cancelled.")
         finally:
             for task in tasks:
                 if not task.done():
                     task.cancel()
-            if self.writer:
-                self.writer.close()
-                await self.writer.wait_closed()
             logging.info("Client shutdown completed.")
 

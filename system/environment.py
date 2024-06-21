@@ -14,5 +14,3 @@ def get_cpu_memory_usage():
     print(f"内存已用: {memory_used:.2f} GB ({memory_percent}%)")
     return cpu_percent,memory_percent
     
-if __name__ == "__main__":
-    get_cpu_memory_usage()
