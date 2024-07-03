@@ -6,27 +6,7 @@ import asyncio,threading
 from typing import Callable
 import logging
 import time
-
-#打开终端端口执行命令
-def open_terminal_execute_cmd(cmd):
-    try:
-        print("execute cmd:"+cmd)
-        #bash避免终端关闭
-        subprocess.Popen("xterm -T mininet -e '"+cmd+"; bash'", shell=True)  # Linux系统
-        return True
-    except Exception as e:
-        print(e)
-        return False
-def open_gnome_terminal_execute_cmd(cmd):
-    try:
-        print("execute cmd:"+cmd)
-        #bash避免终端关闭
-        subprocess.Popen("gnome-terminal -t Mininet -e \"bash -c '"+cmd+"; exec bash'\"", shell=True)  # Linux系统
-        return True
-    except Exception as e:
-        print(e)
-        return False
-    
+   
 #同步执行指令
 def execute_cmd(cmd,wait_time = None):
     try:
@@ -35,9 +15,8 @@ def execute_cmd(cmd,wait_time = None):
         print("execute cmd:"+cmd)
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         p.wait()
-        result = p.stdout.read().decode('utf-8')
-        logging.info("execute result:"+result)
-        return result
+        logging.info("execute result:"+p.stdout.read().decode('utf-8'))
+        return p.stdout.read().decode('utf-8')
     except Exception as e:
         print(e)
         return None

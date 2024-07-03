@@ -23,10 +23,10 @@ import queue
 import math
 
 class SamplingEntropyCalculator(app_manager.RyuApp):
-    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {
-        'wsgi': WSGIApplication
-    }
+    # OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
+    # _CONTEXTS = {
+    #     'wsgi': WSGIApplication
+    # }
     SAMPLE_RATE = 5  # 设置采样率，每N个数据包采样一个
     def __init__(self, *args, **kwargs):
         super(SamplingEntropyCalculator, self).__init__(*args, **kwargs)
@@ -41,7 +41,6 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         #曾经出现过的IP都会被记录
         self.source_ips= {}
         self.destination_ports={}
-        self.protocol_count={}
         #计算熵信息
         self.source_ips_entropy_queue = queue.Queue(8)  
         self.destination_ports_entropy_queue = queue.Queue(8)
@@ -49,66 +48,18 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         #发送给远程监控器的数据
         self.source_ips_entropy_queue_remote = queue.Queue(20)  
         self.destination_ports_entropy_queue_remote = queue.Queue(20)  
-        #启动统计线程
-        # self.processing_thread = threading.Thread(target=self.process_sample_queue)
-        # self.processing_thread.start()
-
-        wsgi = kwargs['wsgi']
-        wsgi.register(TrafficEntropyController, {'traffic_entropy_api_app': self})
+        #统计不同协议的数量(TCP,UDP,ICMP)
+        self.protocol_statistic={
+            "TCP":0,
+            "UDP":0,
+            "ICMP":0,
+            "other":0
+        }
+        
         self.current_source_ips_entropy = queue.Queue()  
         self.current_destination_ports_entropy = queue.Queue()  
         self.current_protocol_rate = {}
-        # 创建 Flask 应用实例
-        # self.flask_app = Flask(__name__)
-        # # 定义 API 路由
-        # @self.flask_app.route('/ryu/traffic_entropy', methods=['GET'])
-        # def get_entropy():
-        #     source_ips_entropy = self.source_ips_entropy_queue.get()
-        #     destination_ports_entropy = self.destination_ports_entropy_queue.get()
-        #     return jsonify({
-        #         'source_ips_entropy': source_ips_entropy,
-        #         'destination_ports_entropy': destination_ports_entropy
-        #     })
-        # # 创建并启动 Flask 线程
-        # self.flask_thread = threading.Thread(target=self.run_flask_app)
-        # self.flask_thread.start()
-    def _request_sampling_packets(self, datapath,hard_timeout=0):
-        self.logger.debug('send stats request: %016x', datapath.id)
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        # 设置采样流表项
-        match = parser.OFPMatch()  # 匹配所有数据包
-        #ofproto.OFPCML_NO_BUFFER设置将数据包发送到控制器
-        actions = [
-            parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,ofproto.OFPCML_NO_BUFFER)  #
-        ]
-        #注意设置优先级比自动转发高
-        self.add_flow(datapath=datapath,priority= 99, match = match, actions = actions)
-    # def add_flow(self, datapath, priority, match, actions, buffer_id=None):
-    #     ofproto = datapath.ofproto
-    #     inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-    #     mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-    #                                 match=match, instructions=inst,
-    #                                 idle_timeout=0,  # 不设置空闲超时
-    #                                 hard_timeout=0,  # 不设置硬超时
-    #                                 flags=ofproto.OFPFF_SEND_FLOW_REM,  
-    #                                 buffer_id=ofproto.OFP_NO_BUFFER,
-    #                                 out_port=ofproto.OFPP_ANY,
-    #                                 out_group=ofproto.OFPG_ANY
-    #                                 )
-    #     datapath.send_msg(mod)
-    
-    # @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    # def switch_features_handler(self, ev):
-    #     datapath = ev.msg.datapath
-    #     ofproto = datapath.ofproto
-    #     parser = datapath.ofproto_parser
-    #     self.datapath = datapath
-    #     self._request_sampling_packets(datapath)
 
-    def run_flask_app(self):
-        self.flask_app.run(host='localhost', port=8888)
-    
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -141,9 +92,17 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
         tcp_pkt = pkt.get_protocol(tcp.tcp)
         udp_pkt = pkt.get_protocol(udp.udp)
-        #self.logger.info(f"eth:{pkt}")
         #icmp是网络层的协议不属于UDP和TCP
         icmp_pkt = pkt.get_protocol(icmp.icmp)
+        if tcp_pkt is not None:
+            self.protocol_statistic["TCP"]+=1
+        elif udp_pkt is not None:
+            self.protocol_statistic["UDP"]+=1
+        elif icmp_pkt is not None:
+            self.protocol_statistic["ICMP"]+=1
+        else:
+            self.protocol_statistic["other"]+=1
+        
         if ipv4_pkt is not None:
             src_ip = ipv4_pkt.src
             dst_ip = ipv4_pkt.dst
@@ -153,18 +112,22 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
                     'src_ip': src_ip,
                     'dst_ip': dst_ip,
                     'dst_port': 0,
-                } 
+            } 
             #判断ipv4_pkt是何种协议ICMP
             if icmp_pkt!=None:
                 sample_data['protocol']='icmp'
+            elif tcp_pkt!=None:
+                sample_data['protocol']='tcp'
+            elif udp_pkt!=None:
+                sample_data['protocol']='udp'
             else:
                 sample_data['protocol']='other'
+
             if tcp_pkt is not None or udp_pkt is not None:
                 dst_port = tcp_pkt.src_port if tcp_pkt else udp_pkt.src_port
                 sample_data['dst_port']=dst_port
             if not self.sample_queue.full():
                 self.sample_queue.put(sample_data)  # 将采样数据放入队列
-            #self.logger.info(f"sample data:{sample_data}")  
         #TODO 检测IPv6数据包
 
         self.packet_count += 1
@@ -287,7 +250,6 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
                 self.current_protocol_rate={}
         except self.sample_queue.empty():
             pass  # 若队列为空，忽略并继续循环
-            # time.sleep(1) #每秒统计一次
     #检测到发生DDoS攻击
     def detect_ddos_by_entropy(self):
         source_ips_entropy=0
@@ -298,9 +260,6 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
             destination_ports_entropy=self.current_destination_ports_entropy.get()
         #判断是否发生DDoS攻击
         if source_ips_entropy > 1 or destination_ports_entropy > 1:
-            # self.logger.info("DDoS attack detected!")
-            # self.logger.info("source ips entropy is high!")
-            # self.logger.info("destination ports entropy is high!")
             return True
         return False
     #计算不同协议的比例
@@ -324,29 +283,6 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         self.processing_thread.join()  # 在应用程序结束时等待处理线程完成
         #self.flask_thread.join()  # 在应用程序结束时等待 Flask 线程完成
 
-class TrafficEntropyController(ControllerBase):
-    def __init__(self, req, link, data, **config):
-        super(TrafficEntropyController, self).__init__(req, link, data, **config)
-        self.traffic_entropy_api_app = data['traffic_entropy_api_app']
 
-    @route('traffic_entropy', '/monitor/traffic_entropy',
-           methods=['GET'])
-    def get_traffic_entropy(self, req, **kwargs):
-        return self._traffic_entropy(req, **kwargs)
-    
-    def _traffic_entropy(self, req, **kwargs):
-        if self.traffic_entropy_api_app.source_ips_entropy_queue == None:
-            return Response(content_type='application/json', body='[]')
-        if self.traffic_entropy_api_app.destination_ports_entropy_queue == None:
-            return Response(content_type='application/json', body='[]') 
-        source_ips_entropy = []
-        while not self.traffic_entropy_api_app.source_ips_entropy_queue_remote.empty():
-            source_ips_entropy.append(self.traffic_entropy_api_app.source_ips_entropy_queue_remote.get())
-        destination_ports_entropy = []
-        while not self.traffic_entropy_api_app.destination_ports_entropy_queue_remote.empty(): 
-            destination_ports_entropy.append(self.traffic_entropy_api_app.destination_ports_entropy_queue_remote.get())
-        body = json.dumps({'source_ips_entropy': source_ips_entropy,
-                'destination_ports_entropy': destination_ports_entropy})
-        return Response(content_type='application/json', body=body)
 
 

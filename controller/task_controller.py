@@ -10,32 +10,6 @@ task_blue = Blueprint('task',__name__,url_prefix='/task') #创建一个蓝图
 
 task_service = TaskService()
 
-@task_blue.route('/get_task_queue', methods=['GET'])
-@run_async
-async def get_task_queue():
-    """异步视图，从队列中获取并返回一条消息"""
-    try:
-        task = await taskQueue.get()  # 直接使用await获取队列中的消息
-        taskQueue.task_done()  # 标记消息处理完成
-        return jsonify({'status':'success',"data": task})
-    except asyncio.QueueEmpty:
-        return jsonify({'status':'error',"message": "No data available"}), 404
-    except:
-        return jsonify({'status':'error',"message": "No data available"}), 404
-
-@task_blue.route('/get_task_result_queue', methods=['GET'])
-@run_async
-async def get_task_result_queue():
-    """异步视图，从队列中获取并返回一条消息"""
-    try:
-        taskResult = await taskResultQueue.get()  # 直接使用await获取队列中的消息
-        taskResultQueue.task_done()  # 标记消息处理完成
-        return jsonify({'status':'success',"data":taskResult})
-    except asyncio.QueueEmpty:
-        return jsonify({"status":"error","message": "No data available"}), 404
-    except:
-        return jsonify({"status":"error","message": "No data available"}), 404
-
 @task_blue.route('/get_task_result_by_task_id', methods=['GET'])
 @run_async
 async def get_task_result_by_task_id():
@@ -43,7 +17,7 @@ async def get_task_result_by_task_id():
     task_id = int(request.args.get('task_id', None))
     try:
         if task_id!=None:
-            result = await DBUtil.async_read_by_key_value('task_result','task_id',task_id)  # 查询json数据库并按时间顺序排序   
+            result = await DBUtil.async_read_by_key_value('operation_task_data','task_id',task_id)  # 查询json数据库并按时间顺序排序   
             if result!=None:
                 return jsonify({'status':'success',"data": result})
         return jsonify({"status":"error","message": "task no exit:"+task_id}), 404
@@ -59,30 +33,21 @@ async def get_task_result_by_task_id():
 async def get_attacker_task():
     """异步视图，从数据库中获取并返回任务数据"""
     try:
-        result = await DBUtil.async_read_by_key_value('task_result','player','attacker')  # 查询json数据库并按时间顺序排序   
+        result = await DBUtil.async_read_by_key_value('operation_task_data','player','attacker')  # 查询json数据库并按时间顺序排序   
         if result!=None:
             return jsonify({'status':'success',"data": result})
         return jsonify({"status":"error","message": "attacker task no exit"}), 404
-    except asyncio.QueueEmpty as e:
-        logging.error(f"get_task_result_by_task_id QueueEmpty err:{e}")
-        return jsonify({"status":"error","message": "No data  available."}), 404
     except Exception as e:
         logging.error(f"get_task_result_by_task_id err:{e}")
         return jsonify({"status":"error","message": "No data  available"}), 404
 
 
-@task_blue.route('/get_task_result_from_db', methods=['GET'])
+@task_blue.route('/get_all_task', methods=['GET'])
 @run_async
-async def get_task_result_from_db():
-    """异步视图，从数据库中获取并返回一条消息"""
-    # 获取查询参数中的limit值，如果没有提供，默认为10
-    limit = int(request.args.get('limit', 10))
+async def get_all_task():
     try:
-        taskResult = await DBUtil.async_read_sort_by_timestamp('task_result',limit=limit)  # 查询json数据库并按时间顺序排序   
+        taskResult = await DBUtil.async_read_sort_by_timestamp('operation_task_data')  # 查询json数据库并按时间顺序排序   
         return jsonify({'status':'success',"data": taskResult})
-    except asyncio.QueueEmpty as e:
-        logging.error(f"get_task_result_from_db QueueEmpty err:{e}")
-        return jsonify({"status":"error","message": "No data  available."}), 404
     except Exception as e:
         logging.error(f"get_task_result_from_db err:{e}")
         return jsonify({"status":"error","message": "No data  available"}), 404
@@ -99,7 +64,20 @@ async def send_player_task():
         return jsonify({'status':'success',"data": task_r})
     except Exception as e:
         return jsonify({"status":"error","message": str(e)}), 404
-
+    
+@task_blue.route("/send_player_task_list",methods=['POST'])
+@run_async
+async def send_player_task_list():
+    #向client发送任务队列
+    try:
+        task_list = request.get_json()
+        if task_list is None:
+            return jsonify({"status":"error","message": "No task list"}), 404
+        task_list_return = await task_service.create_task_list(task_list)
+        return jsonify({'status':'success',"data": task_list_return})
+    except Exception as e:
+        return jsonify({"status":"error","message": str(e)}), 404
+    
 @task_blue.route("/send_test_task",methods=['GET'])
 @run_async
 async def send_test_task():
@@ -111,15 +89,3 @@ async def send_test_task():
         return jsonify({"status":"error","message": str(e)}), 404
 
 
-@task_blue.route("/send_player_task_list",methods=['POST'])
-@run_async
-async def send_player_task_list():
-    #向client发送任务队列
-    try:
-        task_list = request.get_json()
-        if task_list is None:
-            return jsonify({"status":"error","message": "No task list"}), 404
-        task_list_return = await client_connect_server.put_task_data_list(task_list)
-        return jsonify({'status':'success',"data": task_list_return})
-    except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404

@@ -3,21 +3,34 @@ import logging
 from controller.global_vars import client_connect_server
 from controller.global_vars import DBUtil
 from system.simulator import get_current_topo_data,update_current_topo_dynamic_data,get_current_topo_dynamic_data
-
+from service.swicth_task_service import SwitchTaskService 
 logging.basicConfig(level=logging.INFO)
 class TaskService:
     def __init__(self) -> None:
         self.conn = None
+        self.SwitchTaskService = SwitchTaskService()
         pass
 
     async def init_task_service(self):
         pass
     async def send_player_task(self,task):
-        task_r = await client_connect_server.put_task_data(task)
-        await self.update_network_topo_dynamic(task)
+        task_r = {}
+        if task.get('client_type') == 'swicth':
+            task_r = await self.SwitchTaskService.execute_swicth_task(task)
+            #更新拓扑状态
+            #await self.update_network_topo_dynamic_swicth(task) 
+        else:
+            task_r = await client_connect_server.put_task_data(task)
+            #await self.update_network_topo_dynamic_host(task)
         return task_r
-    async def update_network_topo_dynamic(self,task):
-        logging.info("update network topo dynamic")
+    async def create_task_list(self, task_data_list):
+        task_list_return = []
+        for task_data in task_data_list:
+           task_return = await self.send_player_task(task_data)
+           task_list_return.append(task_return)
+        return task_list_return
+    async def update_network_topo_dynamic_host(self,task):
+        logging.info("update network topo dynamic:host")
         try:
             _,topo_id,_ = get_current_topo_data()
             old_network_dynamic_data = get_current_topo_dynamic_data()
@@ -34,6 +47,20 @@ class TaskService:
                     if node['ip'] == task['client_ip']:
                         new_network_dynamic_data['nodes'][node_id]['defend_source']=task['client_ip']
             update_current_topo_dynamic_data(new_network_dynamic_data)          
-            await DBUtil.async_upsert_by_key('network_topo_data','topo_id',topo_id,new_network_dynamic_data)
+        except Exception as e:
+            logging.info(e)
+    
+    async def update_network_topo_dynamic_swicth(self,task):
+        logging.info("update network topo dynamic:swicth")
+        try:
+            _,topo_id,_ = get_current_topo_data()
+            old_network_dynamic_data = get_current_topo_dynamic_data()
+            new_network_dynamic_data = old_network_dynamic_data
+            #进行一些处理
+            for node in old_network_dynamic_data['nodes'].values():
+                if node['type'] == 'swicth':
+                    if node['dpid'] == task['swicth_dpid']:
+                        new_network_dynamic_data['nodes'][node['id']]['defend_source']=task['swicth_dpid']
+            update_current_topo_dynamic_data(new_network_dynamic_data)          
         except Exception as e:
             logging.info(e)

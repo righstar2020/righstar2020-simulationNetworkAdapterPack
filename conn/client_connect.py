@@ -37,7 +37,6 @@ class ClientConnectServer:
     async def send_test_task(self):
         # 示例任务数据结构，添加到队列时应包含客户端IP
         attacker_task_data = { 
-            'id':'none',
             'player':'attacker',
             'client_ip':'10.0.0.1',#攻击者主机
             'task_type':'signal',
@@ -48,7 +47,6 @@ class ClientConnectServer:
             }
         }
         defender_task_data = { 
-            'id':'none',
             'player':'defender',
             'client_ip':'10.0.0.4',#防御者主机
             'task_type':'signal',
@@ -61,8 +59,8 @@ class ClientConnectServer:
                 'request_delay_max':5
             }
         }
-        attacker_task = await self.put_task_data(attacker_task_data)
-        defender_task = await self.put_task_data(defender_task_data)
+        attacker_task = await self.create_task(attacker_task_data)
+        defender_task = await self.create_task(defender_task_data)
         
         return {"attacker_task_data":attacker_task,"defender_task_data":defender_task}
     async def _safe_send(self,writer:StreamWriter, data):
@@ -78,10 +76,8 @@ class ClientConnectServer:
         
     async def handle_task_result(self, task_result,client_ip) -> None:
         """任务处理结果"""
+        await self.update_task(task_result)
         logging.info(f"Task result from {client_ip} stored.")
-        await self.put_task_result_data(task_result)
-        logging.info(f"Task result from {client_ip} stored.")
-        pass
     
     async def handle_rpc(self, reader:StreamReader, writer:StreamWriter, client_address: tuple) -> None:
         """处理单个客户端的RPC请求"""
@@ -103,10 +99,13 @@ class ClientConnectServer:
                     logging.info(f"data from {client_ip}:{data}")
                     if data.get("type") == "heartbeat":
                         await self.handle_heartbeat(writer,client_ip)
-                    else:
+                    if data.get("type") == "task_result":
                         await self.handle_task_result(data,client_ip)
+
                 except Exception as e:
                     logging.warning(f"err: {e}")
+                    if reader.exception:
+                        break
             
         finally:
             del self.connected_clients[client_ip]
@@ -133,13 +132,17 @@ class ClientConnectServer:
         """分发任务给客户端"""
         while True:
             task_data = await self.taskQueue.get()
+            if task_data.get('client_type') == 'switch':
+                #some task executed by switch
+                await self.distribute_swicth_tasks(task_data)
+                continue
+
             client_ip = task_data.get('client_ip')
             client_info = self.connected_clients.get(client_ip)       
             if client_info:
-                task_json = json.dumps(task_data)
                 client_writer = client_info['writer']
                 try:
-                    await self._safe_send(client_writer,{'data':task_json,'type':'task'})
+                    await self._safe_send(client_writer,{'data':task_data,'type':'task'})
                     logging.info(f"Task sent to client {client_ip}: {task_data}")
                 except Exception as e:
                     logging.warning(f"Failed to send task to {client_ip}: {e}")
@@ -151,25 +154,23 @@ class ClientConnectServer:
                 task_result_data = task_data
                 task_result_data['status'] = 'error'
                 task_result_data['message'] = 'No active connection for IP:'+client_ip
-                await self.put_task_result_data(task_result_data)
-    async def put_task_result_data(self, task_result_data):
-        #写入数据库
-        #await self.dbUtil.async_timely_write('task_result',task_result_data)
+                await self.update_task(task_result_data)
+    async def distribute_swicth_tasks(self,task):
+        """处理交换机执行的任务"""
+        
+        pass
+    async def update_task(self, task_data):
         #按task_id更新任务状态
-        await self.dbUtil.async_upsert_by_key('task_result',task_result_data,'task_id',task_result_data['task_id'])
-        #更新任务记录数据库
         try:
-            await self.dbUtil.async_upsert_by_key('operation_task_data',task_result_data,'task_id',task_result_data['task_id'])
+            await self.dbUtil.async_upsert_by_key('operation_task_data',task_data,'task_id',task_data['task_id'])
         except Exception as e:
             logging.warning(f"Failed to write task result to database: {e}")
         
-        logging.info(f"task result write success!-->task id:{task_result_data['task_id']}")
-        #写入队列
-        await self.taskResultQueue.put(task_result_data)
-    async def put_task_data_list(self, task_data_list):
+        logging.info(f"task result write success!-->task id:{task_data['task_id']}")
+    async def create_task_list(self, task_data_list):
         task_list_return = []
         for task_data in task_data_list:
-           task_return = await self.put_task_data(task_data)
+           task_return = await self.create_task(task_data)
            task_list_return.append(task_return)
         return task_list_return
     async def check_task_vaild(self, task_data):
@@ -189,12 +190,10 @@ class ClientConnectServer:
         # 取哈希值的前6位
         task_id = hex_dig[:6]  
         return task_id
-    async def put_task_data(self, task_data):
+    async def create_task(self, task_data):
         task_data['task_id'] = str(self.generate_task_id())
         task_data['status'] = 'running'
         await self.taskQueue.put(task_data)
-        #写入任务结果数据库
-        await self.dbUtil.async_timely_write('task_result',task_data)
         #写入任务记录数据库
         try:
             await self.dbUtil.async_write("operation_task_data",task_data)
@@ -202,7 +201,7 @@ class ClientConnectServer:
             logging.warning(f"Failed to write task to database: {e}")
         logging.info(f"new task write success!-->task id:{task_data['task_id']},player:{task_data['player']}")
         #返回任务ID
-        return {"id":task_data['id'],"task_id":task_data['task_id']}
+        return task_data
     async def get_task_result_data(self):
         return await self.taskResultQueue.get()
     async def get_task_result_data(self):

@@ -1,6 +1,7 @@
 
-from attacker.code.scan.scan import ScanHost
-from defender.code.server.server_c import HostServer
+from attacker.signal.scan import ScanHost
+from attacker.action.ddos_attack import DDoSAttack
+from defender.signal.server_c import HostServer
 
 
 class TaskController:
@@ -8,17 +9,25 @@ class TaskController:
         self.client = client
         self.scanHost = ScanHost()
         self.hostServer = HostServer()
+        self.ddosAttack = DDoSAttack()
 
     async def execute_task(self, task_data):
         task_result = task_data
         scanHost = self.scanHost
         hostServer = self.hostServer
+        ddosAttack = self.ddosAttack
         if task_data['player'] == 'attacker':
             if task_data['task_name'] == 'host_scan':
-                task_result['result'] = await scanHost.start_scan(task_data['params']['target_ip'])
                 # 执行扫描任务
                 if task_data['params']['target_ip']!=None:
                     task_result['result'] = await scanHost.start_scan(task_data['params']['target_ip'])
+                    task_result['status'] = 'success'
+                return task_result
+            if task_data['task_name'] == 'host_attack':
+                # 执行攻击任务
+                if task_data['params']['target_ip']!=None:
+                    task_result['result'] = await ddosAttack.ddos_attack(task_data['params']['target_ip'],
+                                                                         task_data['params']['attack_type'])
                     task_result['status'] = 'success'
                 return task_result
         elif task_data['player'] == 'defender':
@@ -38,4 +47,3 @@ class TaskController:
                                                                                              request_delay_max)
                 task_result['status']='success'
                 return task_result
-            pass

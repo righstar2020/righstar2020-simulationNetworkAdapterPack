@@ -71,7 +71,7 @@ class Client:
         while True:
             await asyncio.sleep(20)
             try:
-                heartbeat_data = {"type": "heartbeat", "timestamp": int(time.time())}
+                heartbeat_data = {"type": "heartbeat", "timestamp": int(round(time.time() * 1000))}
                 logging.info(f"send_heartbeat-->: {heartbeat_data}")
                 await self._safe_send(json.dumps(heartbeat_data))
             except Exception as e:
@@ -84,19 +84,20 @@ class Client:
         logging.info("receive messages started.")
         while True:
             try:
-                data_raw = await self.reader.readline()
+                message_raw = await self.reader.readline()
                 try:
-                    data=json.loads(data_raw.decode().strip())
-                    logging.info(f"data from server :{data}.")
-                    if data.get("type") == "heartbeat":
-                        #如果是心跳包直接忽略
-                        pass
-                    elif data.get("type") == "task":
-                        self.taskQueue.put_nowait(data)  # 将消息放入任务队列
+                    message=json.loads(message_raw.decode().strip())
+                    logging.info(f"message from server :{message}.")
+                    if  message.get("type") == "task":
+                        try:
+                            self.taskQueue.put_nowait(message['data'])  # 将消息放入任务队列
+                            logging.info(f"data from server :{message['data']}.")
+                        except Exception as e:
+                            logging.warning(f"receive_messages-->Unable to decode data: {message['data']}")    
                     else:
-                        logging.warning(f"unkown type:{data}")
+                        logging.warning(f"unkown type:{message}")
                 except Exception as e:
-                    logging.warning(f"receive_messages-->Unable to decode data: {data_raw}")                
+                    logging.warning(f"receive_messages-->Unable to decode data: {message_raw}")                
             except Exception as e:
                 logging.warning(f"receive_messages-->Connection lost: Attempting to reconnect...")
                 #等待一个心跳后重试
@@ -113,16 +114,21 @@ class Client:
                 try:
                     logging.info(f"process tasks:{task_data}.")
                     processed_result = await self.taskController.execute_task(task_data)
-                    processed_result['task_id'] = task_data['task_id']
-                    await self.taskResultQueue.put(processed_result)  # 处理结果放入结果队列
-                    logging.info(f"process tasks success:{processed_result}.")
+                    task_result = {"type": "task_result", 'data':processed_result,"timestamp": int(round(time.time() * 1000))}
+                    logging.info(f"process result:{task_result}.")
+                    await self.taskResultQueue.put(task_result)  # 处理结果放入结果队列
                 except Exception as e:
                     logging.warning(f"process tasks fail-->: {e}")
-                    processed_result = {'task_id': task_data['task_id'], 'result': 'error', 'status':'error','message': str(e)}
-                    await self.taskResultQueue.put(processed_result)
+                    task_data['status']='error'
+                    task_data['message']=str(e)
+                    task_result = {"type": "task_result", 'data':task_data,"timestamp": int(round(time.time() * 1000))}
+                    await self.taskResultQueue.put(task_result)  # 处理结果放入结果队列
             except Exception as e:
                 logging.critical(f"Error occurred while processing task:{e}",)
-                continue
+                task_data['status']='error'
+                task_data['message']=str(e)
+                task_result = {"type": "task_result", 'data':task_data,"timestamp": int(round(time.time() * 1000))}
+                await self.taskResultQueue.put(task_result)  # 处理结果放入结果队列
 
             
             
@@ -131,7 +137,6 @@ class Client:
         while True:
             result = await self.taskResultQueue.get()
             try:
-                logging.info(f"send process results:{result}.")
                 logging.info(f"send results-->: {result}")
                 await self._safe_send(json.dumps(result))
             except Exception as e:
@@ -142,9 +147,7 @@ class Client:
                 await asyncio.sleep(random.uniform(5, 10))
                 # 尝试重新连接
                 await self.connect_to_server()
-    async def put_task_result(self, task_data):
-        """将任务结果放入结果队列"""
-        await self.taskResultQueue.put(task_data)
+
     async def run(self):
         """客户端主运行逻辑，包含连接重试逻辑"""
         self._init_params()

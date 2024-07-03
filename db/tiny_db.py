@@ -31,10 +31,17 @@ class TinyDBUtil:
             table.insert(data)
             logging.info(f"Inserted new document with {fieldName}={value} as no existing match was found.")
         db.close()
-    async def async_write(self, table_name, data):
+    async def async_write(self, table_name, data = None):
         db = TinyDB(self.db_path)
         table = db.table(table_name)
-        table.insert(data)
+        if data != None:
+            table.insert(data)
+        db.close()
+    async def async_clear_table(self, table_name):
+        db = TinyDB(self.db_path)
+        table = db.table(table_name)
+        # 清空表中的数据
+        table.truncate()
         db.close()
         
     async def async_timely_write(self, table_name, data):
