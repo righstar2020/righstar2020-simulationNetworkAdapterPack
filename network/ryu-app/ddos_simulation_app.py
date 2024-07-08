@@ -136,6 +136,24 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
         match_icmp = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, ip_proto=inet.IPPROTO_ICMP)
         actions_drop = []
         self.add_flow(datapath=datapath, priority=3,match=match_icmp, actions=actions_drop)  # 设置较低优先级确保白名单规则先匹配
+    #添加TCP封禁
+    def add_flow_TCP_drop(self,ev):
+        datapath = ev.msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match_icmp = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, ip_proto=inet.IPPROTO_TCP)
+        actions_drop = []
+        self.add_flow(datapath=datapath, priority=3,match=match_icmp, actions=actions_drop)  # 设置较低优先级确保白名单规则先匹配
+    
+    #添加UDP封禁
+    def add_flow_UDP_drop(self,ev):
+        datapath = ev.msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match_icmp = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, ip_proto=inet.IPPROTO_UDP)
+        actions_drop = []
+        self.add_flow(datapath=datapath, priority=3,match=match_icmp, actions=actions_drop)  # 设置较低优先级确保白名单规则先匹配
+  
     def clear_flow_ICMP_drop(self,ev):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
@@ -167,12 +185,13 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
             'parser': parser,
             'traffic_sampling':False
         }  
-        self._add_flow_miss_rule(datapath) #流表缺失事件
-        sampling_switch_id_list = ['1','5','10'] #设置三台采样机器
-        for dpid in sampling_switch_id_list:
-            if datapath.id == dpid:
-                self._request_sampling_packets(datapath)
-                self.datapathInfoMap[datapath.id]['traffic_sampling'] = True
+        self._request_sampling_packets(datapath) #全部交换机进行流量采样
+        # self._add_flow_miss_rule(datapath) #流表缺失事件
+        # sampling_switch_id_list = ['1','5','10'] #设置三台采样机器
+        # for dpid in sampling_switch_id_list:
+        #     if datapath.id == dpid:
+        #         self._request_sampling_packets(datapath)
+        #         self.datapathInfoMap[datapath.id]['traffic_sampling'] = True
           
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -180,18 +199,27 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
         super(DDoSSimulationAPP, self).packet_in_handler(ev)
         datapath = ev.msg.datapath
         #更新datapath信息
-        self.datapathInfoMapStr[datapath.id] = {
-            'socket': datapath.address,
-            'traffic_sampling':True
-        }
+        # self.datapathInfoMapStr[datapath.id] = {
+        #     'socket': datapath.address,
+        #     'traffic_sampling':True
+        # }
         if self.trafficEngineerRuleMap.get(ev.msg.datapath.id) !=None:
             swicth_defend_rule = self.trafficEngineerRuleMap.get(ev.msg.datapath.id)
             if swicth_defend_rule.get('ip_white_table') == True:
                 self.ip_white_table(ev)
-            if swicth_defend_rule.get('icmp_drop') == True:
+            if swicth_defend_rule.get('ICMP') == True:
                 self.add_flow_ICMP_drop(ev)
-                #只执行一次流表规则的下发
-                self.trafficEngineerRuleMap[ev.msg.datapath.id]['icmp_drop'] = False
+                #只执行一次协议封禁的下发
+                self.trafficEngineerRuleMap[ev.msg.datapath.id]['ICMP'] = False
+            if swicth_defend_rule.get('TCP') == True:
+                self.add_flow_TCP_drop(ev)
+                #只执行一次协议封禁的下发
+                self.trafficEngineerRuleMap[ev.msg.datapath.id]['TCP'] = False
+            
+            if swicth_defend_rule.get('UDP') == True:
+                self.add_flow_UDP_drop(ev)
+                #只执行一次协议封禁的下发
+                self.trafficEngineerRuleMap[ev.msg.datapath.id]['UDP'] = False
             
     def ip_white_table(self,ev):
        #检测DDoS是否发生
@@ -246,6 +274,23 @@ class TrafficEngineerController(ControllerBase):
     """
         流量工程接口
     """
+    @route('icmp_drop', '/engineer/protocol_forbid',
+           methods=['POST'])
+    def protocol_forbid(self, req, **kwargs):
+        dpid = req.json['dpid']
+        protocol = req.json['protocol']
+        response = {'status': 'error',
+                'data': dpid}
+        if dpid != None:
+            #对所有交换机都执行协议封禁操作
+            for key in self.traffic_engineer_app.trafficEngineerRuleMap.keys():
+                if self.traffic_engineer_app.trafficEngineerRuleMap.get(key) !=None:
+                    self.traffic_engineer_app.trafficEngineerRuleMap[key][protocol] = True
+                else:
+                    self.traffic_engineer_app.trafficEngineerRuleMap[key]={protocol:True}
+            response = {'status': 'success','data':dpid}
+        body = json.dumps(response)
+        return Response(content_type='application/json', body=body)
     @route('ip_white_table', '/engineer/set_ip_white_table',
            methods=['POST'])
     def set_ip_white_table(self, req, **kwargs):
@@ -256,6 +301,7 @@ class TrafficEngineerController(ControllerBase):
         response = {'status': 'success','data': {'dpid':dpid}}
         body = json.dumps(response)
         return Response(content_type='application/json', body=body)
+    
     @route('ip_white_table', '/engineer/set_ip_white_table',
            methods=['GET'])
     def set_ip_white_table(self, req, **kwargs):
@@ -269,20 +315,7 @@ class TrafficEngineerController(ControllerBase):
             response = {'status': 'success','data': {'dpid':dpid}}
         body = json.dumps(response)
         return Response(content_type='application/json', body=body)
-    @route('icmp_drop', '/engineer/set_icmp_drop',
-           methods=['POST'])
-    def set_icmp_drop(self, req, **kwargs):
-        dpid = req.json['dpid']
-        response = {'status': 'error',
-                'data': dpid}
-        if dpid != None:
-            if self.traffic_engineer_app.trafficEngineerRuleMap.get(dpid) !=None:
-                self.traffic_engineer_app.trafficEngineerRuleMap[dpid]['icmp_drop'] = True
-            else:
-                self.traffic_engineer_app.trafficEngineerRuleMap[dpid]={'icmp_drop':True}
-            response = {'status': 'success','data':dpid}
-        body = json.dumps(response)
-        return Response(content_type='application/json', body=body)
+    
 
 
 class TrafficEntropyController(ControllerBase):

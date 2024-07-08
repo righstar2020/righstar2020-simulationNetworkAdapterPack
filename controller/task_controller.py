@@ -20,13 +20,13 @@ async def get_task_result_by_task_id():
             result = await DBUtil.async_read_by_key_value('operation_task_data','task_id',task_id)  # 查询json数据库并按时间顺序排序   
             if result!=None:
                 return jsonify({'status':'success',"data": result})
-        return jsonify({"status":"error","message": "task no exit:"+task_id}), 404
+        return jsonify({"status":"error","message": "task no exit:"+task_id})
     except asyncio.QueueEmpty as e:
         logging.error(f"get_task_result_by_task_id QueueEmpty err:{e}")
-        return jsonify({"status":"error","message": "No data  available."}), 404
+        return jsonify({"status":"error","message": "No data  available."})
     except Exception as e:
         logging.error(f"get_task_result_by_task_id err:{e}")
-        return jsonify({"status":"error","message": "No data  available"}), 404
+        return jsonify({"status":"error","message": "No data  available"})
 
 @task_blue.route('/get_attacker_task', methods=['GET'])
 @run_async
@@ -36,10 +36,10 @@ async def get_attacker_task():
         result = await DBUtil.async_read_by_key_value('operation_task_data','player','attacker')  # 查询json数据库并按时间顺序排序   
         if result!=None:
             return jsonify({'status':'success',"data": result})
-        return jsonify({"status":"error","message": "attacker task no exit"}), 404
+        return jsonify({"status":"error","message": "attacker task no exit"})
     except Exception as e:
         logging.error(f"get_task_result_by_task_id err:{e}")
-        return jsonify({"status":"error","message": "No data  available"}), 404
+        return jsonify({"status":"error","message": "No data  available"})
 
 
 @task_blue.route('/get_all_task', methods=['GET'])
@@ -50,7 +50,7 @@ async def get_all_task():
         return jsonify({'status':'success',"data": taskResult})
     except Exception as e:
         logging.error(f"get_task_result_from_db err:{e}")
-        return jsonify({"status":"error","message": "No data  available"}), 404
+        return jsonify({"status":"error","message": "No data  available"})
 
 @task_blue.route("/send_player_task",methods=['POST'])
 @run_async
@@ -59,11 +59,11 @@ async def send_player_task():
     try:
         task = request.get_json()
         if task is None:
-            return jsonify({"status":"error","message": "No task"}), 404
+            return jsonify({"status":"error","message": "No task"})
         task_r = await task_service.send_player_task(task)
         return jsonify({'status':'success',"data": task_r})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
     
 @task_blue.route("/send_player_task_list",methods=['POST'])
 @run_async
@@ -72,11 +72,11 @@ async def send_player_task_list():
     try:
         task_list = request.get_json()
         if task_list is None:
-            return jsonify({"status":"error","message": "No task list"}), 404
+            return jsonify({"status":"error","message": "No task list"})
         task_list_return = await task_service.create_task_list(task_list)
         return jsonify({'status':'success',"data": task_list_return})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
     
 @task_blue.route("/send_test_task",methods=['GET'])
 @run_async
@@ -86,6 +86,6 @@ async def send_test_task():
         task_r = await client_connect_server.send_test_task()
         return jsonify({'status':'success',"data": task_r})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
 
 

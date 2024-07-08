@@ -62,7 +62,7 @@ async def get_traffic_flow():
             logging.warning(f"error to update traffic_flow data:{e}")
         return jsonify({'status':'success',"data": result})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
 @env_blue.route("/get_history_traffic_flow",methods=['GET'])
 @run_async
 async def get_history_traffic_flow():
@@ -76,7 +76,7 @@ async def get_history_traffic_flow():
         }
         return jsonify({'status':'success',"data": result})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404 
+        return jsonify({"status":"error","message": str(e)}) 
 
 @env_blue.route("/get_traffic_entropy",methods=['GET'])
 @run_async
@@ -85,7 +85,6 @@ async def get_traffic_entropy():
     try:
         result = await async_http_request('http://127.0.0.1:8080/monitor/traffic_entropy')
         # 更新流量熵指标到数据库
-        #先获取数据
         try:
             update_data = await DBUtil.async_read_by_key_value('env_status_data','status_name','traffic_entropy')
             update_data = update_data[0]
@@ -99,7 +98,7 @@ async def get_traffic_entropy():
             
         return jsonify({'status':'success',"data": result})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
 
 @env_blue.route("/get_protocol_count",methods=['GET'])
 @run_async
@@ -110,9 +109,9 @@ async def get_protocol_count():
         data = result.get('data')
         if data != None:
             return jsonify({'status':'success',"data": data})
-        return jsonify({"status":"error","message": 'no data'}), 404
+        return jsonify({"status":"error","message": 'no data'})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
 
    
 @env_blue.route("/get_history_traffic_entropy",methods=['GET'])
@@ -127,7 +126,7 @@ async def get_all_traffic_entropy_data():
         }
         return jsonify({'status':'success',"data": result})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404 
+        return jsonify({"status":"error","message": str(e)}) 
 
 @env_blue.route("/get_cpu_memory_usage_status",methods=['GET'])
 @run_async
@@ -140,7 +139,7 @@ async def get_cpu_memory_usage_status():
         }
         return jsonify({'status':'success',"data": result})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
     
 @env_blue.route("/get_network_status",methods=['GET'])
 @run_async
@@ -149,7 +148,7 @@ async def get_network_status():
         iperf3_json_data = await get_iperf3_test_data()
         return jsonify({'status':'success',"data": iperf3_json_data})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})
 @env_blue.route("/get_network_delay_by_ip",methods=['GET'])
 @run_async
 async def get_network_delay_by_ip():
@@ -163,4 +162,4 @@ async def get_network_delay_by_ip():
             ip_delay_data[ip] = await get_ping_delay_data(ip)
         return jsonify({'status':'success',"data": ip_delay_data})
     except Exception as e:
-        return jsonify({"status":"error","message": str(e)}), 404
+        return jsonify({"status":"error","message": str(e)})

@@ -41,4 +41,4 @@ def start_flask_background():
                                    taskResultQueue,
                                    DBUtil)
     print("-------------1.5 启动flask服务器-------------------")
-    app.run(host="10.0.0.101",port=5000,debug=True, use_reloader=False)  #注意：use_reloader=False 防止重载时创建多个事件循环 
+    app.run(host="10.0.0.101",port=5000,debug=False, use_reloader=False)  #注意：use_reloader=False 防止重载时创建多个事件循环 

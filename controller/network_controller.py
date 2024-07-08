@@ -19,7 +19,7 @@ async def get_topo_data():
         }
         return jsonify({'status':'success',"data": data})
     except Exception as e:
-        return jsonify({'status':'error',"message":str(e)}), 404
+        return jsonify({'status':'error',"message":str(e)})
     
 @network_blue.route('/get_network_dynamic_topo_data', methods=['GET'])
 @run_async
@@ -33,4 +33,4 @@ async def get_network_dynamic_topo_data():
         }
         return jsonify({'status':'success',"data": data})
     except Exception as e:
-        return jsonify({'status':'error',"message": "No data available"}), 404
+        return jsonify({'status':'error',"message": "No data available"})

@@ -1,5 +1,5 @@
 
-from conn.client_connect import ClientConnectServer
+from server.client_connect import ClientConnectServer
 from db.tiny_db import  TinyDBUtil
 import asyncio
 import aiohttp
@@ -26,19 +26,20 @@ async def async_http_request(url):
             except Exception as e:
                 #非json则返回text
                 return await response.text()
-
-async def async_http_post(url,data):
+async def async_http_post(url, data):
     async with aiohttp.ClientSession() as session:
         try:
-            return await session.post(url,data=data,headers={'Content-Type': 'application/json'})
+            async with session.post(url, json=data, headers={'Content-Type': 'application/json'}) as response:
+                return await response.json()  # 假设响应是JSON格式的
         except Exception as e:
             print(str(e))
             return None
 
-async def async_http_put(url,data):
+async def async_http_put(url, data):
     async with aiohttp.ClientSession() as session:
         try:
-            return await session.put(url,data=data,headers={'Content-Type': 'application/json'})
+            async with session.put(url, json=data, headers={'Content-Type': 'application/json'}) as response:
+                return await response.json()  # 同样假设响应是JSON格式的
         except Exception as e:
             print(str(e))
             return None

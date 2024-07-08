@@ -16,12 +16,12 @@ class TaskService:
     async def send_player_task(self,task):
         task_r = {}
         if task.get('client_type') == 'swicth':
-            task_r = await self.SwitchTaskService.execute_swicth_task(task)
+            task_r = await self.SwitchTaskService.create_swicth_task(task)
             #更新拓扑状态
-            #await self.update_network_topo_dynamic_swicth(task) 
+            await self.update_network_topo_dynamic_swicth(task) 
         else:
-            task_r = await client_connect_server.put_task_data(task)
-            #await self.update_network_topo_dynamic_host(task)
+            task_r = await client_connect_server.create_task(task)
+            await self.update_network_topo_dynamic_host(task)
         return task_r
     async def create_task_list(self, task_data_list):
         task_list_return = []
@@ -46,6 +46,9 @@ class TaskService:
                 if task['player'] == 'defender':
                     if node['ip'] == task['client_ip']:
                         new_network_dynamic_data['nodes'][node_id]['defend_source']=task['client_ip']
+                    if node['dpid'] == task['swicth_dpid']:
+                        new_network_dynamic_data['nodes'][node_id]['defend_source']=task['swicth_dpid']
+                    
             update_current_topo_dynamic_data(new_network_dynamic_data)          
         except Exception as e:
             logging.info(e)
@@ -58,7 +61,7 @@ class TaskService:
             new_network_dynamic_data = old_network_dynamic_data
             #进行一些处理
             for node in old_network_dynamic_data['nodes'].values():
-                if node['type'] == 'swicth':
+                if node['node_type'] == 'swicth':
                     if node['dpid'] == task['swicth_dpid']:
                         new_network_dynamic_data['nodes'][node['id']]['defend_source']=task['swicth_dpid']
             update_current_topo_dynamic_data(new_network_dynamic_data)          

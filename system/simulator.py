@@ -27,14 +27,14 @@ def update_current_topo_dynamic_data(data):
         current_topo_dynamic_data = data
         update_current_topo_data_to_db(current_topo_dynamic_data)
 def insert_topo_data_to_db(topo_data):
-    asyncio.run(dbUtil.async_write("network_topo_data", topo_data))
+    dbUtil.async_write("network_topo_data", topo_data)
 
 def update_topo_data_to_db(topo_id,topo_data):
-    asyncio.run(dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id",topo_id))
+    dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id",topo_id)
 def update_current_topo_data_to_db(topo_data):
     #更新当前网络拓扑数据
     topo_data['topo_id'] = 'current_topo'#id设置为当前网络拓扑
-    asyncio.run(dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id","current_topo"))
+    dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id","current_topo")
 """
     仿真网络操作方法
 """

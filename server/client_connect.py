@@ -71,7 +71,7 @@ class ClientConnectServer:
             await asyncio.wait_for(writer.drain(), timeout=30)
     async def handle_heartbeat(self, writer:StreamWriter,client_ip: str) -> None:
         """处理心跳包，更新心跳时间"""
-        logging.info(f"Heartbeat from {client_ip}.")
+        # logging.info(f"Heartbeat from {client_ip}.")
         self.connected_clients[client_ip]['last_heartbeat_time'] = time.time()
         
     async def handle_task_result(self, task_result,client_ip) -> None:
@@ -100,7 +100,8 @@ class ClientConnectServer:
                     if data.get("type") == "heartbeat":
                         await self.handle_heartbeat(writer,client_ip)
                     if data.get("type") == "task_result":
-                        await self.handle_task_result(data,client_ip)
+                        task_data = data.get("data")
+                        await self.handle_task_result(task_data,client_ip)
 
                 except Exception as e:
                     logging.warning(f"err: {e}")
@@ -164,8 +165,7 @@ class ClientConnectServer:
         try:
             await self.dbUtil.async_upsert_by_key('operation_task_data',task_data,'task_id',task_data['task_id'])
         except Exception as e:
-            logging.warning(f"Failed to write task result to database: {e}")
-        
+            logging.warning(f"Failed to write task result to database: {e}")    
         logging.info(f"task result write success!-->task id:{task_data['task_id']}")
     async def create_task_list(self, task_data_list):
         task_list_return = []
@@ -193,14 +193,15 @@ class ClientConnectServer:
     async def create_task(self, task_data):
         task_data['task_id'] = str(self.generate_task_id())
         task_data['status'] = 'running'
-        await self.taskQueue.put(task_data)
         #写入任务记录数据库
         try:
             await self.dbUtil.async_write("operation_task_data",task_data)
+            logging.info(f"success to write task to database: {task_data['task_id']}")
         except Exception as e:
             logging.warning(f"Failed to write task to database: {e}")
         logging.info(f"new task write success!-->task id:{task_data['task_id']},player:{task_data['player']}")
-        #返回任务ID
+        #执行任务
+        await self.taskQueue.put(task_data)
         return task_data
     async def get_task_result_data(self):
         return await self.taskResultQueue.get()

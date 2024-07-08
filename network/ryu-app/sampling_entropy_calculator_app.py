@@ -47,7 +47,9 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         self.protocol_rate_queue = queue.Queue(8)
         #发送给远程监控器的数据
         self.source_ips_entropy_queue_remote = queue.Queue(20)  
-        self.destination_ports_entropy_queue_remote = queue.Queue(20)  
+        self.destination_ports_entropy_queue_remote = queue.Queue(20)
+        #协议计数
+        self.protocol_count = {}
         #统计不同协议的数量(TCP,UDP,ICMP)
         self.protocol_statistic={
             "TCP":0,

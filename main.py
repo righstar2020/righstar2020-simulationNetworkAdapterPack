@@ -2,7 +2,7 @@
 #启动Flask服务器
 # app.py
 from flask import Flask,jsonify,request
-from conn.client_connect import ClientConnectServer
+from server.client_connect import ClientConnectServer
 from db.tiny_db import  TinyDBUtil
 import asyncio
 import threading

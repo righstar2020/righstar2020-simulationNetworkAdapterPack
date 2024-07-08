@@ -27,7 +27,8 @@ class TaskController:
                 # 执行攻击任务
                 if task_data['params']['target_ip']!=None:
                     task_result['result'] = await ddosAttack.ddos_attack(task_data['params']['target_ip'],
-                                                                         task_data['params']['attack_type'])
+                                                                         task_data['params']['attack_type'],
+                                                                         int(task_data['params']['duration']))
                     task_result['status'] = 'success'
                 return task_result
         elif task_data['player'] == 'defender':
