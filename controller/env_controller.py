@@ -43,23 +43,23 @@ async def get_traffic_flow():
         result = await async_http_request('http://localhost:8008/activeflows/ALL/mn_ipv4_traffic/json')
         #更流量数据到数据库
         #先获取数据
-        try:
-            update_data = await DBUtil.async_read_by_key_value('env_status_data','status_name','traffic_flow')
-            update_data = update_data[0]
-            timstamp = int(round(time.time() * 1000))
-            total_traffic_bytes = 0
-            if len(result) > 0:
-                update_data['status_data']['tcp'] = {}
-                for flow in result:
-                    if flow['value'] is not None:
-                        total_traffic_bytes += flow['value']
-                #现在可以安全地赋值了，因为已确保'tcp'是一个字典
-                update_data['status_data']['tcp'][str(timstamp)] = str(int(total_traffic_bytes))
+        # try:
+        #     update_data = await DBUtil.async_read_by_key_value('env_status_data','status_name','traffic_flow')
+        #     update_data = update_data[0]
+        #     timstamp = int(round(time.time() * 1000))
+        #     total_traffic_bytes = 0
+        #     if len(result) > 0:
+        #         update_data['status_data']['tcp'] = {}
+        #         for flow in result:
+        #             if flow['value'] is not None:
+        #                 total_traffic_bytes += flow['value']
+        #         #现在可以安全地赋值了，因为已确保'tcp'是一个字典
+        #         update_data['status_data']['tcp'][str(timstamp)] = str(int(total_traffic_bytes))
 
-            await DBUtil.async_upsert_by_key('env_status_data',data=update_data, fieldName='status_name', value='traffic_flow')
-        except Exception as e:
-            print(f"Error Type: {type(e)}, Error Message: {e}")
-            logging.warning(f"error to update traffic_flow data:{e}")
+        #     await DBUtil.async_upsert_by_key('env_status_data',data=update_data, fieldName='status_name', value='traffic_flow')
+        # except Exception as e:
+        #     print(f"Error Type: {type(e)}, Error Message: {e}")
+        #     logging.warning(f"error to update traffic_flow data:{e}")
         return jsonify({'status':'success',"data": result})
     except Exception as e:
         return jsonify({"status":"error","message": str(e)})
@@ -85,16 +85,16 @@ async def get_traffic_entropy():
     try:
         result = await async_http_request('http://127.0.0.1:8080/monitor/traffic_entropy')
         # 更新流量熵指标到数据库
-        try:
-            update_data = await DBUtil.async_read_by_key_value('env_status_data','status_name','traffic_entropy')
-            update_data = update_data[0]
-            if len(result["source_ips_entropy"])>0:
-                update_data['status_data']['source_ips_entropy'].extend(result["source_ips_entropy"])
-            if len(result["destination_ports_entropy"])>0:
-                update_data['status_data']['destination_ports_entropy'].extend(result["destination_ports_entropy"])
-            await DBUtil.async_upsert_by_key('env_status_data','status_name','traffic_entropy',update_data)
-        except Exception as e:
-            logging.warning(f"error to update traffic_entropy data:{e}")
+        # try:
+        #     update_data = await DBUtil.async_read_by_key_value('env_status_data','status_name','traffic_entropy')
+        #     update_data = update_data[0]
+        #     if len(result["source_ips_entropy"])>0:
+        #         update_data['status_data']['source_ips_entropy'].extend(result["source_ips_entropy"])
+        #     if len(result["destination_ports_entropy"])>0:
+        #         update_data['status_data']['destination_ports_entropy'].extend(result["destination_ports_entropy"])
+        #     await DBUtil.async_upsert_by_key('env_status_data','status_name','traffic_entropy',update_data)
+        # except Exception as e:
+        #     logging.warning(f"error to update traffic_entropy data:{e}")
             
         return jsonify({'status':'success',"data": result})
     except Exception as e:

@@ -25,16 +25,17 @@ def update_current_topo_dynamic_data(data):
     global current_topo_dynamic_data
     if data!=None:
         current_topo_dynamic_data = data
-        update_current_topo_data_to_db(current_topo_dynamic_data)
-def insert_topo_data_to_db(topo_data):
-    dbUtil.async_write("network_topo_data", topo_data)
+        # update_current_topo_data_to_db(current_topo_dynamic_data)
+async def insert_topo_data_to_db(topo_data):
+    await dbUtil.async_write("network_topo_data", topo_data)
 
-def update_topo_data_to_db(topo_id,topo_data):
-    dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id",topo_id)
-def update_current_topo_data_to_db(topo_data):
+async def update_topo_data_to_db(topo_id,topo_data):
+    await dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id",topo_id)
+async def update_current_topo_data_to_db():
     #更新当前网络拓扑数据
+    global current_topo_dynamic_data
     topo_data['topo_id'] = 'current_topo'#id设置为当前网络拓扑
-    dbUtil.async_upsert_by_key("network_topo_data", topo_data,"topo_id","current_topo")
+    await dbUtil.async_upsert_by_key("network_topo_data", current_topo_dynamic_data,"topo_id","current_topo")
 """
     仿真网络操作方法
 """
@@ -57,6 +58,7 @@ def start_simulator_by_topo(topo_name):
     current_topo_name = topo_name
     current_topo_id  = topo_data[topo_name]['topo_id']
     update_current_topo_dynamic_data(topo_data[topo_name]) #更新数据库当前网络拓扑数据
+    asyncio.run(update_current_topo_data_to_db())
     cmd_list = [project_dir+"/cmd/sflow.sh --stop",#    1.清理仿真网络
                 project_dir+"/cmd/ryu.sh --stop",
                 project_dir+"/cmd/mininet.sh --stop"]

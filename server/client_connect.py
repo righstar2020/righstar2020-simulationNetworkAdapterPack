@@ -42,7 +42,9 @@ class ClientConnectServer:
             'task_type':'signal',
             'task_name':'host_scan',
             'status':'running',
+            'client_ip':'10.0.0.1',
             'params':{
+                'client_ip':'10.0.0.1',
                 'target_ip':'10.0.0.4'
             }
         }
@@ -52,6 +54,7 @@ class ClientConnectServer:
             'task_type':'signal',
             'task_name':'host_deception',#主机伪装
             'status':'running',
+            'client_ip':'10.0.0.4',
             'params':{
                 'target_ip':'10.0.0.4',
                 'port':80,
@@ -135,7 +138,7 @@ class ClientConnectServer:
             task_data = await self.taskQueue.get()
             if task_data.get('client_type') == 'switch':
                 #some task executed by switch
-                await self.distribute_swicth_tasks(task_data)
+                await self.distribute_switch_tasks(task_data)
                 continue
 
             client_ip = task_data.get('client_ip')
@@ -156,7 +159,7 @@ class ClientConnectServer:
                 task_result_data['status'] = 'error'
                 task_result_data['message'] = 'No active connection for IP:'+client_ip
                 await self.update_task(task_result_data)
-    async def distribute_swicth_tasks(self,task):
+    async def distribute_switch_tasks(self,task):
         """处理交换机执行的任务"""
         
         pass

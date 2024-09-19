@@ -18,7 +18,7 @@ class SwitchTaskService:
         # 取哈希值的前6位
         task_id = hex_dig[:6]  
         return task_id
-    async def create_swicth_task(self, task_data):
+    async def create_switch_task(self, task_data):
         task_data['task_id'] = str(self.generate_task_id())
         task_data['status'] = 'running'
         task_data['timestamp'] = int(round(time.time() * 1000)) #更新时间戳
@@ -32,23 +32,23 @@ class SwitchTaskService:
             task_data['message'] = str(e)
         #执行switch操作任务
         try:
-            task_data = await self.execute_swicth_task(task_data)
+            task_data = await self.execute_switch_task(task_data)
         except Exception as e:
             logging.warning(f"Failed to execute switch task: {e}")
             task_data['status'] = 'error'
             task_data['message'] = str(e)
         #任switch任务执行完成更新数据库
-        await self.update_swicth_task(task_data)
+        await self.update_switch_task(task_data)
         #返回任务数据
         return task_data
-    async def update_swicth_task(self, task_data):
+    async def update_switch_task(self, task_data):
         #按task_id更新交换机任务状态
         try:
             await DBUtil.async_upsert_by_key('operation_task_data',task_data,'task_id',task_data['task_id'])
         except Exception as e:
             logging.warning(f"Failed to write task result to database: {e}")    
         logging.info(f"task result write success!-->task id:{task_data['task_id']}")
-    async def execute_swicth_task(self,task):
+    async def execute_switch_task(self,task):
         #执行交换机任务
         dpid = task['params']['dpid']
         task['status'] = 'error'
@@ -70,4 +70,9 @@ class SwitchTaskService:
         return drop_icmp_result['status'],drop_icmp_result['data']
 
     async def ip_white_table(self,dpid):
-        pass
+        post_data = {
+            'dpid':dpid
+        }
+        result = await async_http_post('http://127.0.0.1:8080/engineer/set_ip_white_table',post_data)
+        logging.info(f"icmp drop result:{result}")
+        return result['status'],result['data']

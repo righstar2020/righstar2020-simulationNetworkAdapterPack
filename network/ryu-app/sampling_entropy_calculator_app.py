@@ -81,7 +81,7 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         datapath.send_msg(mod)
     def packet_in_handler(self, ev):
         #每个数据包进行路由表学习，保证数据包能够正常转发
-        self.swicth_mac_to_port(ev)
+        self.switch_mac_to_port(ev)
         #采样率
         self.sample_count += 1
         if self.sample_count % self.SAMPLE_RATE!=0:
@@ -138,7 +138,7 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
             self.packet_count=0
             self.process_sample_queue()
     #交换机路由表学习
-    def swicth_mac_to_port(self, ev):
+    def switch_mac_to_port(self, ev):
         # If you hit this you might want to increase
         # the "miss_send_length" of your switch
         if ev.msg.msg_len < ev.msg.total_len:
@@ -261,7 +261,7 @@ class SamplingEntropyCalculator(app_manager.RyuApp):
         if not self.current_destination_ports_entropy.empty():
             destination_ports_entropy=self.current_destination_ports_entropy.get()
         #判断是否发生DDoS攻击
-        if source_ips_entropy > 1 or destination_ports_entropy > 1:
+        if source_ips_entropy < 1 or destination_ports_entropy < 1:
             return True
         return False
     #计算不同协议的比例

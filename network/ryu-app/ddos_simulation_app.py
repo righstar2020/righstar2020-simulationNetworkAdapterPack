@@ -167,7 +167,7 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
         self.add_flow_white_table(ev)
         icmp_rate=self.current_protocol_rate.get('icmp',0)
         self.logger.info(f'icmp rate:{icmp_rate}')
-        if icmp_rate>0.5:
+        if icmp_rate>0.3:
             self.add_flow_ICMP_drop(ev)
     def clear_defense_flow_rule(self,ev):
         self.clear_white_table(ev)
@@ -184,14 +184,24 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
             'ofproto': ofproto,
             'parser': parser,
             'traffic_sampling':False
-        }  
-        self._request_sampling_packets(datapath) #全部交换机进行流量采样
-        # self._add_flow_miss_rule(datapath) #流表缺失事件
-        # sampling_switch_id_list = ['1','5','10'] #设置三台采样机器
-        # for dpid in sampling_switch_id_list:
-        #     if datapath.id == dpid:
-        #         self._request_sampling_packets(datapath)
-        #         self.datapathInfoMap[datapath.id]['traffic_sampling'] = True
+        }
+        #初始化防御规则
+        self.trafficEngineerRuleMap[datapath.id] = {
+            'ip_white_table':False,
+            'ICMP':False,
+            'TCP':False,
+            'UDP':False
+        }
+        self._add_flow_miss_rule(datapath) #流表缺失事件
+        all_sampling = False
+        if all_sampling :
+            self._request_sampling_packets(datapath) #全部交换机进行流量采样
+        else:    
+            sampling_switch_id_list = ['1','3','5','6','10','12','13']
+            for dpid in sampling_switch_id_list:
+                if datapath.id == dpid:
+                    self._request_sampling_packets(datapath)
+                    self.datapathInfoMap[datapath.id]['traffic_sampling'] = True
           
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -199,24 +209,20 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
         super(DDoSSimulationAPP, self).packet_in_handler(ev)
         datapath = ev.msg.datapath
         #更新datapath信息
-        # self.datapathInfoMapStr[datapath.id] = {
-        #     'socket': datapath.address,
-        #     'traffic_sampling':True
-        # }
         if self.trafficEngineerRuleMap.get(ev.msg.datapath.id) !=None:
-            swicth_defend_rule = self.trafficEngineerRuleMap.get(ev.msg.datapath.id)
-            if swicth_defend_rule.get('ip_white_table') == True:
+            switch_defend_rule = self.trafficEngineerRuleMap.get(ev.msg.datapath.id)
+            if switch_defend_rule.get('ip_white_table') == True:
                 self.ip_white_table(ev)
-            if swicth_defend_rule.get('ICMP') == True:
+            if switch_defend_rule.get('ICMP') == True:
                 self.add_flow_ICMP_drop(ev)
-                #只执行一次协议封禁的下发
+                #每台交换机只执行一次协议封禁的下发
                 self.trafficEngineerRuleMap[ev.msg.datapath.id]['ICMP'] = False
-            if swicth_defend_rule.get('TCP') == True:
+            if switch_defend_rule.get('TCP') == True:
                 self.add_flow_TCP_drop(ev)
                 #只执行一次协议封禁的下发
                 self.trafficEngineerRuleMap[ev.msg.datapath.id]['TCP'] = False
             
-            if swicth_defend_rule.get('UDP') == True:
+            if switch_defend_rule.get('UDP') == True:
                 self.add_flow_UDP_drop(ev)
                 #只执行一次协议封禁的下发
                 self.trafficEngineerRuleMap[ev.msg.datapath.id]['UDP'] = False
@@ -227,6 +233,12 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
             #self.logger.info('检测到流量异常行为!')
             self.DDoSing_count+=1
             #self.logger.info(f'DDoS count:{self.DDoSing_count}')
+        else:
+            if self.DDoSing_count>20:
+                self.DDoSing_count=20
+            else:
+                self.DDoSing_count-=1 #十次正常熵后则恢复正常
+
         #超过5次流量熵异常行为则认为发生了DDoS
         if  self.DDoSing_count>10:
             if not self.is_DDoS_attacking:
@@ -238,7 +250,7 @@ class DDoSSimulationAPP(SamplingEntropyCalculator):
             if self.is_DDoS_attacking:
                 if not self.detect_ddos_by_entropy():
                     self.logger.info('流量恢复正常,清除防御协议')
-                    #self.clear_defense_flow_rule(ev)
+                    self.clear_defense_flow_rule(ev)
                     self.is_DDoS_attacking=False
                     self.DDoSing_count=0
 
@@ -291,6 +303,7 @@ class TrafficEngineerController(ControllerBase):
             response = {'status': 'success','data':dpid}
         body = json.dumps(response)
         return Response(content_type='application/json', body=body)
+    
     @route('ip_white_table', '/engineer/set_ip_white_table',
            methods=['POST'])
     def set_ip_white_table(self, req, **kwargs):
