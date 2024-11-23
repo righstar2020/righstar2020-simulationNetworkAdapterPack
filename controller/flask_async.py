@@ -5,7 +5,6 @@ import asyncio
 
 #异步flask修饰器
 #可指定使用的事件循环(对象在同一事件循环里才可访问)
-
 def run_async(func):
     @wraps(func)
     def _wrapper(*args, **kwargs):

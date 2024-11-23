@@ -24,8 +24,6 @@ def network_simulator():
     print("-------------3.启动网络仿真环境-------------------")
     start_simulator()
 
-    
-
 if __name__ == '__main__':
     threading.Thread(target=network_simulator, daemon=True).start()
     background_service()

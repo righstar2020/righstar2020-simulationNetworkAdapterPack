@@ -69,9 +69,3 @@ async def init_db():
                               },'status_name','traffic_entropy')
  
     
-# #如果没有数据库则创建数据库
-# def main():
-#     asyncio.run(create_db_table())
-
-# if __name__ == '__main__':
-#     main()
